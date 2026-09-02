@@ -1,0 +1,90 @@
+import raw from './names.json';
+
+const dedupe = (list) =>
+  [...new Set(list.map((n) => n.trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+
+const FIRST = dedupe(raw.first);
+const LAST = dedupe(raw.last);
+const ALL = dedupe([...raw.first, ...raw.last]);
+
+const MASK_CHARS = '*xX#•';
+
+const isMasked = (token) => [...token].some((c) => MASK_CHARS.includes(c));
+
+// A mask token such as "P***N" means: 5 letters, starts with P, ends with N.
+function tokenToRegex(token) {
+  const body = [...token]
+    .map((c) => {
+      if (MASK_CHARS.includes(c)) return '[a-z]';
+      if (/[a-z]/i.test(c)) return c.toLowerCase();
+      return c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    })
+    .join('');
+  return new RegExp(`^${body}$`, 'i');
+}
+
+function candidatesFor(token, pool, limit) {
+  const re = tokenToRegex(token);
+  const hits = pool.filter((name) => re.test(name));
+  return { total: hits.length, names: hits.slice(0, limit) };
+}
+
+function buildCombinations(parts, limit) {
+  let combos = [''];
+  for (const part of parts) {
+    const options = part.masked ? (part.candidates.length ? part.candidates : [part.token]) : [part.token];
+    const next = [];
+    for (const base of combos) {
+      for (const option of options) {
+        next.push(base ? `${base} ${option}` : option);
+        if (next.length >= limit) break;
+      }
+      if (next.length >= limit) break;
+    }
+    combos = next;
+  }
+  return combos;
+}
+
+/** Break a masked owner name into parts and suggest real names for each masked part. */
+export function suggestNames(maskedName, { perPartLimit = 40, comboLimit = 60 } = {}) {
+  const cleaned = String(maskedName || '').trim();
+  if (!cleaned) return { masked: '', parts: [], combinations: [], note: 'No owner name to work with.' };
+
+  const tokens = cleaned.split(/\s+/);
+  const parts = tokens.map((token, index) => {
+    if (!isMasked(token)) {
+      return {
+        token,
+        masked: false,
+        isInitial: token.replace(/\W/g, '').length === 1,
+        total: 1,
+        candidates: [token],
+      };
+    }
+    const pool = index === 0 ? FIRST : tokens.length - 1 === index ? LAST : ALL;
+    const primary = candidatesFor(token, pool, perPartLimit);
+    // Fall back to the full dictionary when the positional pool yields nothing.
+    const result = primary.total > 0 ? primary : candidatesFor(token, ALL, perPartLimit);
+    return {
+      token,
+      masked: true,
+      isInitial: false,
+      length: token.length,
+      total: result.total,
+      candidates: result.names,
+    };
+  });
+
+  return {
+    masked: cleaned,
+    parts,
+    combinations: buildCombinations(parts, comboLimit),
+    hasMask: parts.some((p) => p.masked),
+    note: parts.some((p) => p.masked && p.total === 0)
+      ? 'No dictionary match for one or more masked parts — the real name may be outside the built-in name list.'
+      : 'Suggestions are dictionary guesses based on the visible letters and mask length, not confirmed data.',
+  };
+}
+
+export const dictionarySize = { first: FIRST.length, last: LAST.length, total: ALL.length };

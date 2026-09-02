@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/lookup",
+      "destination": "https://vehicleinfobyterabaap.vercel.app/lookup"
+    }
+  ]
+}
