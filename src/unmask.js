@@ -47,7 +47,7 @@ function buildCombinations(parts, limit) {
 }
 
 /** Break a masked owner name into parts and suggest real names for each masked part. */
-export function suggestNames(maskedName, { perPartLimit = 40, comboLimit = 60 } = {}) {
+export function suggestNames(maskedName, { perPartLimit = 5, comboLimit = 6 } = {}) {
   const cleaned = String(maskedName || '').trim();
   if (!cleaned) return { masked: '', parts: [], combinations: [], note: 'No owner name to work with.' };
 

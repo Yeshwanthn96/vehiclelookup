@@ -429,6 +429,22 @@ body {
   color: #fca5a5;
 }
 
+.top-name {
+  display: inline-block;
+  padding: 12px 20px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  color: #fff;
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  box-shadow: 0 14px 30px -16px rgba(109, 139, 255, 0.9);
+}
+
+.alt-heading {
+  margin-top: 18px;
+}
+
 .note {
   color: var(--muted);
   font-size: 13px;

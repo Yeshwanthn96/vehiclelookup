@@ -3,7 +3,7 @@ const MONTHS = {
   jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11,
 };
 
-const HIDDEN_KEYS = new Set(['copyright']);
+const HIDDEN_KEYS = new Set(['copyright', 'source']);
 
 const OWNER_KEYS = ['Owner Name', 'owner_name', 'ownerName', 'Owner'];
 
@@ -15,12 +15,31 @@ export const HIGHLIGHTS = [
 ];
 
 const GROUPS = [
-  { title: 'Vehicle', keys: ['Model Name', 'Maker Model', 'Vehicle Class', 'Fuel Norms'] },
+  {
+    title: 'Vehicle',
+    keys: [
+      'Model Name', 'Maker Model', 'Vehicle Class', 'Fuel Type', 'Fuel Norms',
+      'Cubic Capacity', 'Seating Capacity', 'Chassis Number', 'Engine Number',
+    ],
+  },
   {
     title: 'Validity & compliance',
-    keys: ['Insurance Company', 'Insurance Upto', 'Insurance Expiry', 'PUC Upto', 'Fitness Upto', 'Tax Upto'],
+    keys: [
+      'Insurance Company', 'Insurance No', 'Insurance Upto', 'Insurance Expiry',
+      'Insurance Expiry In', 'PUC Upto', 'Fitness Upto', 'Tax Upto',
+    ],
   },
-  { title: 'Registration', keys: ['Registration Date', 'Registered RTO', 'City Name', 'Address', 'Phone'] },
+  {
+    title: 'Registration',
+    keys: [
+      'Registration Number', 'Registration Date', 'Vehicle Age', 'Registered RTO',
+      'Code', 'City Name', 'Address', 'Phone', 'Website',
+    ],
+  },
+  {
+    title: 'Status',
+    keys: ['Challan Status', 'Pending Fines', 'Financer Name', 'Permit Type', 'Blacklist Status', 'NOC Details', 'RC Status'],
+  },
 ];
 
 /** Dates come back as "20-Oct-2040"; anything else (e.g. "LTT") is not a date. */

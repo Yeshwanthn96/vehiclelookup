@@ -1,8 +1,5 @@
 {
-  "rewrites": [
-    {
-      "source": "/api/lookup",
-      "destination": "https://vehicleinfobyterabaap.vercel.app/lookup"
-    }
-  ]
+  "framework": "vite",
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist"
 }

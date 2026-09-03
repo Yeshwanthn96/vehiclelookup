@@ -56,8 +56,18 @@ export default function App() {
     setShowNames(false);
     try {
       const res = await fetch(`/api/lookup?rc=${encodeURIComponent(value)}`);
+      const json = await res.json().catch(() => null);
+
+      // The upstream returns 404 with an "error" body both for unknown numbers
+      // and when its own source (vahanx.in) is unreachable.
+      if (json?.error) {
+        throw new Error(
+          /timed out|network error|connection/i.test(json.error)
+            ? "The vehicle data service is temporarily unreachable. Please try again in a few minutes."
+            : json.error,
+        );
+      }
       if (!res.ok) throw new Error(`Lookup failed (${res.status})`);
-      const json = await res.json();
       if (!json || typeof json !== "object" || Object.keys(json).length === 0) {
         throw new Error("No details found for this number.");
       }
@@ -78,7 +88,7 @@ export default function App() {
   return (
     <div className="page">
       <header className="header">
-        <h1>Vehicle Check</h1>
+        <h1>Vehicle Details Check</h1>
         <p>Enter a vehicle registration number to fetch its RC details.</p>
       </header>
 
@@ -87,7 +97,7 @@ export default function App() {
           value={rc}
           onChange={onChange}
           onBlur={() => setTouched(true)}
-          placeholder="KA02MX3713"
+          placeholder="KA02MX3710"
           aria-label="Vehicle or RC number"
           aria-invalid={touched && !check.valid}
           className={touched && rc && !check.valid ? "invalid" : ""}
@@ -104,7 +114,7 @@ export default function App() {
       <p className={`hint${touched && !check.valid ? " error" : ""}`}>
         {touched && !check.valid
           ? check.message
-          : "Formats: KA02MX3713 (standard) or 22BH1234A (BH series)."}
+          : "Formats: KA02MX3710 (standard) or 22BH1234A (BH series)."}
       </p>
 
       {error && <p className="alert">{error}</p>}
@@ -203,14 +213,26 @@ export default function App() {
               ))}
               {suggestions.combinations.length > 0 && (
                 <div className="part">
-                  <h3>Possible full names</h3>
-                  <div className="chips">
-                    {suggestions.combinations.map((name) => (
-                      <span className="chip solid" key={name}>
-                        {name}
-                      </span>
-                    ))}
-                  </div>
+                  <h3>Top match</h3>
+                  <div className="top-name">{suggestions.combinations[0]}</div>
+                  {suggestions.combinations.length > 1 && (
+                    <>
+                      <h3 className="alt-heading">
+                        Other possible names
+                        <span className="muted">
+                          {" "}
+                          · {suggestions.combinations.length - 1} more
+                        </span>
+                      </h3>
+                      <div className="chips">
+                        {suggestions.combinations.slice(1).map((name) => (
+                          <span className="chip solid" key={name}>
+                            {name}
+                          </span>
+                        ))}
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
               <p className="note">{suggestions.note}</p>
