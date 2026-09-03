@@ -11,11 +11,16 @@ import {
 } from "./rcNumber.js";
 
 // Fire-and-forget; a logging failure must never affect the lookup.
-function logSearch(rc, found) {
+function logSearch(rc, found, details) {
   fetch("/api/log", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ rc, found }),
+    body: JSON.stringify({
+      rc,
+      found,
+      model: details?.["Maker Model"] || details?.["Model Name"] || null,
+      owner: details?.["Owner Name"] || null,
+    }),
     keepalive: true,
   }).catch(() => {});
 }
@@ -80,7 +85,7 @@ export default function App() {
         addRecent(value, json["Maker Model"] || json["Model Name"] || ""),
       );
       window.history.replaceState(null, "", `/rc/${value}`);
-      logSearch(value, true);
+      logSearch(value, true, json);
     } catch (err) {
       logSearch(value, false);
       setError(err.message || "Something went wrong.");
