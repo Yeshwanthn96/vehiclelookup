@@ -401,6 +401,11 @@ body {
   font-weight: 600;
 }
 
+.chip.ai {
+  background: linear-gradient(135deg, rgba(34, 211, 238, 0.18), rgba(168, 85, 247, 0.12));
+  border-color: rgba(34, 211, 238, 0.4);
+}
+
 .pill {
   display: inline-block;
   margin-left: 8px;

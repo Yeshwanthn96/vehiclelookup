@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { suggestNames } from "./unmask.js";
+import { buildCombinations, suggestNames } from "./unmask.js";
 import { expiryStatus, groupsOf, highlightsOf, ownerNameOf } from "./fields.js";
 import { assessVehicle } from "./risk.js";
 import { addRecent, clearRecent, readRecent } from "./recent.js";
@@ -43,6 +43,16 @@ export default function App() {
   const [showNames, setShowNames] = useState(false);
   const [recent, setRecent] = useState(readRecent);
   const [copied, setCopied] = useState(false);
+  const [aiNames, setAiNames] = useState({});
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiEnabled, setAiEnabled] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/health")
+      .then((res) => res.json())
+      .then((info) => setAiEnabled(Boolean(info?.ai)))
+      .catch(() => setAiEnabled(false));
+  }, []);
 
   const check = useMemo(() => validateRc(rc), [rc]);
   const owner = data ? ownerNameOf(data) : "";
@@ -55,6 +65,55 @@ export default function App() {
   const risk = useMemo(() => assessVehicle(data), [data]);
   const highlights = useMemo(() => (data ? highlightsOf(data) : []), [data]);
   const groups = useMemo(() => (data ? groupsOf(data) : []), [data]);
+
+  const missingParts = useMemo(
+    () =>
+      (suggestions?.parts || [])
+        .filter((part) => part.masked && part.candidates.length === 0)
+        .map((part) => part.token),
+    [suggestions],
+  );
+
+  // Dictionary hits are verified real names, so they lead; AI widens the net.
+  const mergedParts = useMemo(
+    () =>
+      (suggestions?.parts || []).map((part) => {
+        const ai = (aiNames[part.token] || []).filter(
+          (name) => !part.candidates.includes(name),
+        );
+        return { ...part, ai, candidates: [...part.candidates, ...ai] };
+      }),
+    [suggestions, aiNames],
+  );
+
+  const mergedCombinations = useMemo(
+    () => (mergedParts.length ? buildCombinations(mergedParts, 6) : []),
+    [mergedParts],
+  );
+
+  const fetchAiNames = useCallback(async (tokens, state) => {
+    if (!tokens.length) return;
+    setAiLoading(true);
+    try {
+      const url = `/api/suggest?token=${encodeURIComponent(tokens.join(","))}&state=${encodeURIComponent(state)}`;
+      const res = await fetch(url);
+      const json = await res.json().catch(() => null);
+      if (json?.names) setAiNames((prev) => ({ ...prev, ...json.names }));
+    } catch {
+      /* dictionary results still stand */
+    } finally {
+      setAiLoading(false);
+    }
+  }, []);
+
+  // Widen every masked part with AI as soon as suggestions are opened.
+  useEffect(() => {
+    if (!showNames || !aiEnabled || !suggestions?.hasMask) return;
+    const tokens = suggestions.parts
+      .filter((part) => part.masked && !aiNames[part.token])
+      .map((part) => part.token);
+    fetchAiNames(tokens, stateCode);
+  }, [showNames, aiEnabled, suggestions, aiNames, stateCode, fetchAiNames]);
 
   const lookup = useCallback(async (value) => {
     setLoading(true);
@@ -317,46 +376,58 @@ export default function App() {
             </button>
           ) : (
             <>
-              {suggestions.parts.map((part, index) => (
+              {mergedParts.map((part, index) => (
                 <div className="part" key={`${part.token}-${index}`}>
                   <h3>
                     {part.token}
                     {part.masked && (
-                      <span className="muted"> · {part.total} matches</span>
+                      <span className="muted">
+                        {" "}
+                        · {part.total} in dictionary
+                        {part.ai.length > 0 && `, ${part.ai.length} from AI`}
+                      </span>
                     )}
                   </h3>
                   {part.masked ? (
                     part.candidates.length ? (
                       <div className="chips">
                         {part.candidates.map((name) => (
-                          <span className="chip" key={name}>
+                          <span
+                            className={`chip${part.ai.includes(name) ? " ai" : ""}`}
+                            key={name}
+                          >
                             {name}
                           </span>
                         ))}
                       </div>
+                    ) : aiLoading ? (
+                      <p className="muted">Searching wider with AI…</p>
                     ) : (
-                      <p className="muted">No dictionary match.</p>
+                      <p className="muted">
+                        No match found
+                        {aiEnabled ? " in the dictionary or from AI." : "."}
+                      </p>
                     )
                   ) : (
                     <p className="muted">Not masked.</p>
                   )}
                 </div>
               ))}
-              {suggestions.combinations.length > 0 && (
+              {mergedCombinations.length > 0 && (
                 <div className="part">
                   <h3>Top match</h3>
-                  <div className="top-name">{suggestions.combinations[0]}</div>
-                  {suggestions.combinations.length > 1 && (
+                  <div className="top-name">{mergedCombinations[0]}</div>
+                  {mergedCombinations.length > 1 && (
                     <>
                       <h3 className="alt-heading">
                         Other possible names
                         <span className="muted">
                           {" "}
-                          · {suggestions.combinations.length - 1} more
+                          · {mergedCombinations.length - 1} more
                         </span>
                       </h3>
                       <div className="chips">
-                        {suggestions.combinations.slice(1).map((name) => (
+                        {mergedCombinations.slice(1).map((name) => (
                           <span className="chip solid" key={name}>
                             {name}
                           </span>
@@ -365,6 +436,21 @@ export default function App() {
                     </>
                   )}
                 </div>
+              )}
+              {mergedCombinations.length === 0 && !aiLoading && (
+                <p className="muted">
+                  No full name can be suggested while a masked part has no
+                  match.
+                </p>
+              )}
+              {missingParts.length > 0 && aiEnabled && !aiLoading && (
+                <button
+                  className="ghost no-print"
+                  type="button"
+                  onClick={() => fetchAiNames(missingParts, stateCode)}
+                >
+                  Retry AI search
+                </button>
               )}
               <p className="note">{suggestions.note}</p>
             </>

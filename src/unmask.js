@@ -50,10 +50,14 @@ function rankerFor(stateCode) {
   return (name) => (patterns.some((re) => re.test(name)) ? 1 : 0);
 }
 
-function buildCombinations(parts, limit) {
+export function buildCombinations(parts, limit = 6) {
+  // A masked part with no candidate would only ever produce the mask itself,
+  // so there is no honest full name to offer.
+  if (parts.some((part) => part.masked && part.candidates.length === 0)) return [];
+
   let combos = [''];
   for (const part of parts) {
-    const options = part.masked ? (part.candidates.length ? part.candidates : [part.token]) : [part.token];
+    const options = part.masked ? part.candidates : [part.token];
     const next = [];
     for (const base of combos) {
       for (const option of options) {
