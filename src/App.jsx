@@ -8,6 +8,16 @@ import {
   validateRc,
 } from "./rcNumber.js";
 
+// Fire-and-forget; a logging failure must never affect the lookup.
+function logSearch(rc, found) {
+  fetch("/api/log", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ rc, found }),
+    keepalive: true,
+  }).catch(() => {});
+}
+
 export default function App() {
   const [rc, setRc] = useState("");
   const [touched, setTouched] = useState(false);
@@ -53,7 +63,9 @@ export default function App() {
       }
       setData(json);
       setQueried(value);
+      logSearch(value, true);
     } catch (err) {
+      logSearch(value, false);
       setError(err.message || "Something went wrong.");
     } finally {
       setLoading(false);
