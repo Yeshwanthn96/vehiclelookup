@@ -1,6 +1,8 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { suggestNames } from "./unmask.js";
 import { expiryStatus, groupsOf, highlightsOf, ownerNameOf } from "./fields.js";
+import { assessVehicle } from "./risk.js";
+import { addRecent, clearRecent, readRecent } from "./recent.js";
 import {
   MAX_RC_LENGTH,
   isTypableRc,
@@ -18,48 +20,49 @@ function logSearch(rc, found) {
   }).catch(() => {});
 }
 
+const rcFromUrl = () => {
+  const path = window.location.pathname.match(/^\/rc\/([A-Za-z0-9]+)/);
+  if (path) return normalizeRc(path[1]);
+  return normalizeRc(
+    new URLSearchParams(window.location.search).get("rc") || "",
+  );
+};
+
 export default function App() {
-  const [rc, setRc] = useState("");
+  const [rc, setRc] = useState(() => rcFromUrl());
   const [touched, setTouched] = useState(false);
   const [data, setData] = useState(null);
   const [queried, setQueried] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showNames, setShowNames] = useState(false);
+  const [recent, setRecent] = useState(readRecent);
+  const [copied, setCopied] = useState(false);
 
   const check = useMemo(() => validateRc(rc), [rc]);
-
   const owner = data ? ownerNameOf(data) : "";
+  const stateCode = queried.slice(0, 2);
+
   const suggestions = useMemo(
-    () => (owner ? suggestNames(owner) : null),
-    [owner],
+    () => (owner ? suggestNames(owner, { stateCode }) : null),
+    [owner, stateCode],
   );
+  const risk = useMemo(() => assessVehicle(data), [data]);
+  const highlights = useMemo(() => (data ? highlightsOf(data) : []), [data]);
+  const groups = useMemo(() => (data ? groupsOf(data) : []), [data]);
 
-  function onChange(event) {
-    const next = normalizeRc(event.target.value);
-    // Reject keystrokes that cannot lead to a valid registration number.
-    if (!isTypableRc(next)) return;
-    setRc(next);
-  }
-
-  async function onSubmit(event) {
-    event.preventDefault();
-    setTouched(true);
-    if (!check.valid) {
-      setError(check.message);
-      return;
-    }
-    const value = check.rc;
+  const lookup = useCallback(async (value) => {
     setLoading(true);
     setError("");
     setData(null);
     setShowNames(false);
+    setCopied(false);
     try {
       const res = await fetch(`/api/lookup?rc=${encodeURIComponent(value)}`);
       const json = await res.json().catch(() => null);
 
-      // The upstream returns 404 with an "error" body both for unknown numbers
-      // and when its own source (vahanx.in) is unreachable.
+      // The source returns an "error" body both for unknown numbers and when
+      // its own upstream is unreachable.
       if (json?.error) {
         throw new Error(
           /timed out|network error|connection/i.test(json.error)
@@ -73,6 +76,10 @@ export default function App() {
       }
       setData(json);
       setQueried(value);
+      setRecent(
+        addRecent(value, json["Maker Model"] || json["Model Name"] || ""),
+      );
+      window.history.replaceState(null, "", `/rc/${value}`);
       logSearch(value, true);
     } catch (err) {
       logSearch(value, false);
@@ -80,19 +87,68 @@ export default function App() {
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  // Deep link: /rc/KA02MQ1724 loads that vehicle straight away.
+  useEffect(() => {
+    const initial = rcFromUrl();
+    if (initial && validateRc(initial).valid) lookup(initial);
+  }, [lookup]);
+
+  function onChange(event) {
+    const next = normalizeRc(event.target.value);
+    // Reject keystrokes that cannot lead to a valid registration number.
+    if (!isTypableRc(next)) return;
+    setRc(next);
   }
 
-  const highlights = useMemo(() => (data ? highlightsOf(data) : []), [data]);
-  const groups = useMemo(() => (data ? groupsOf(data) : []), [data]);
+  function onSubmit(event) {
+    event.preventDefault();
+    setTouched(true);
+    if (!check.valid) {
+      setError(check.message);
+      return;
+    }
+    lookup(check.rc);
+  }
+
+  function runRecent(value) {
+    setRc(value);
+    setTouched(false);
+    lookup(value);
+  }
+
+  async function share() {
+    const url = `${window.location.origin}/rc/${queried}`;
+    const title = `${queried} · ${data?.["Maker Model"] || "Vehicle details"}`;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title, url });
+        return;
+      } catch {
+        /* dismissed - fall through to copying */
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setError("Could not copy the link.");
+    }
+  }
 
   return (
     <div className="page">
       <header className="header">
         <h1>Vehicle Details Check</h1>
-        <p>Enter a vehicle registration number to fetch its RC details.</p>
+        <p>
+          RC details, pending challans and a buyer&apos;s risk report for any
+          Indian registration number.
+        </p>
       </header>
 
-      <form className="search" onSubmit={onSubmit}>
+      <form className="search no-print" onSubmit={onSubmit}>
         <input
           value={rc}
           onChange={onChange}
@@ -111,13 +167,70 @@ export default function App() {
         </button>
       </form>
 
-      <p className={`hint${touched && !check.valid ? " error" : ""}`}>
+      <p className={`hint no-print${touched && !check.valid ? " error" : ""}`}>
         {touched && !check.valid
           ? check.message
           : "Formats: KA02MX3710 (standard) or 22BH1234A (BH series)."}
       </p>
 
+      {recent.length > 0 && !data && !loading && (
+        <div className="recent no-print">
+          <div className="recent-head">
+            <span className="muted">Recently checked</span>
+            <button
+              type="button"
+              className="link"
+              onClick={() => setRecent(clearRecent())}
+            >
+              Clear
+            </button>
+          </div>
+          <div className="chips">
+            {recent.map((item) => (
+              <button
+                type="button"
+                className="chip clickable"
+                key={item.rc}
+                onClick={() => runRecent(item.rc)}
+              >
+                <strong>{item.rc}</strong>
+                {item.label && <span className="muted"> · {item.label}</span>}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {error && <p className="alert">{error}</p>}
+
+      {risk && (
+        <section className={`card verdict ${risk.verdict.tone}`}>
+          <div className="verdict-head">
+            <div
+              className="score"
+              aria-label={`Score ${risk.score} out of 100`}
+            >
+              <strong>{risk.score}</strong>
+              <span>/100</span>
+            </div>
+            <div>
+              <h2>{risk.verdict.label}</h2>
+              <p className="muted">{risk.verdict.summary}</p>
+            </div>
+          </div>
+          <ul className="findings">
+            {risk.findings.map((finding) => (
+              <li className={`finding ${finding.severity}`} key={finding.title}>
+                <span className="dot" aria-hidden="true" />
+                <div>
+                  <strong>{finding.title}</strong>
+                  <p>{finding.detail}</p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {data && (
         <section className="card">
@@ -126,7 +239,20 @@ export default function App() {
             <span className="muted">
               {data["Maker Model"] || data["Model Name"] || "Vehicle details"}
             </span>
+            <div className="actions no-print">
+              <button type="button" className="link" onClick={share}>
+                {copied ? "Link copied" : "Share"}
+              </button>
+              <button
+                type="button"
+                className="link"
+                onClick={() => window.print()}
+              >
+                Save as PDF
+              </button>
+            </div>
           </div>
+
           <div className="highlights">
             {highlights.map(({ key, label, value }) => {
               const status = expiryStatus(key, value);
@@ -178,7 +304,7 @@ export default function App() {
           </div>
           {!showNames ? (
             <button
-              className="ghost"
+              className="ghost no-print"
               type="button"
               onClick={() => setShowNames(true)}
             >
@@ -186,8 +312,8 @@ export default function App() {
             </button>
           ) : (
             <>
-              {suggestions.parts.map((part, i) => (
-                <div className="part" key={`${part.token}-${i}`}>
+              {suggestions.parts.map((part, index) => (
+                <div className="part" key={`${part.token}-${index}`}>
                   <h3>
                     {part.token}
                     {part.masked && (
@@ -242,7 +368,14 @@ export default function App() {
       )}
 
       <footer className="footer">
-        Data is fetched from a public RC lookup API. Use responsibly.
+        <p>
+          Data comes from public RTO sources and may be incomplete or out of
+          date. Verify with the RTO before any purchase.
+        </p>
+        <p className="muted">
+          Searched registration numbers are logged to detect abuse. Nothing is
+          sold or shared.
+        </p>
       </footer>
     </div>
   );

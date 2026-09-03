@@ -18,12 +18,15 @@ const decode = (text) =>
 
 const clean = (html) => decode(html.replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim();
 
+// vahanx renders these as hardcoded placeholders (identical for every vehicle), so they are dropped.
+const PLACEHOLDER_FIELDS = new Set(['Cubic Capacity', 'Seating Capacity']);
+
 function parse(html) {
   const fields = {};
   const add = (label, value) => {
     const key = clean(label);
     const val = clean(value);
-    if (!key || !val || key in fields) return;
+    if (!key || !val || key in fields || PLACEHOLDER_FIELDS.has(key)) return;
     // Skip page furniture: real labels are short and values are single data points.
     if (key.split(' ').length > 4 || val.length > 120) return;
     fields[key] = val;

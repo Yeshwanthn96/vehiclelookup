@@ -19,7 +19,7 @@ const GROUPS = [
     title: 'Vehicle',
     keys: [
       'Model Name', 'Maker Model', 'Vehicle Class', 'Fuel Type', 'Fuel Norms',
-      'Cubic Capacity', 'Seating Capacity', 'Chassis Number', 'Engine Number',
+      'Chassis Number', 'Engine Number',
     ],
   },
   {

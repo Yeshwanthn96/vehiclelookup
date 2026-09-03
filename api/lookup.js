@@ -1,4 +1,5 @@
 import { fetchChallanSummary, fetchFromVahan } from './_vahan.js';
+import { rateLimit } from './_rateLimit.js';
 import { validateRc } from '../src/rcNumber.js';
 
 const WRAPPER = 'https://vehicleinfobyterabaap.vercel.app/lookup?rc=';
@@ -14,6 +15,13 @@ async function fetchFromWrapper(rc) {
 }
 
 export default async function handler(req, res) {
+  const limit = rateLimit(req);
+  res.setHeader('X-RateLimit-Remaining', String(limit.remaining));
+  if (!limit.allowed) {
+    res.setHeader('Retry-After', String(limit.retryAfter));
+    return res.status(429).json({ error: 'Too many lookups. Please wait a minute and try again.' });
+  }
+
   const check = validateRc(req.query?.rc);
   if (!check.valid) return res.status(400).json({ error: check.message });
 
