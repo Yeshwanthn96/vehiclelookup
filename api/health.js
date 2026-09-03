@@ -1,5 +1,6 @@
 import { driver } from './_db.js';
 import { sheetEnabled } from './_sheet.js';
+import { providerEnabled } from './_challan.js';
 import { aiEnabled } from './suggest.js';
 
 // Reports which logging sinks are configured. Booleans only - no secrets.
@@ -10,6 +11,7 @@ export default function handler(req, res) {
     store: driver,
     sheet: sheetEnabled,
     ai: aiEnabled,
+    challanProvider: providerEnabled,
     adminKey: Boolean(process.env.ADMIN_KEY),
     env: process.env.VERCEL_ENV || 'local',
   });

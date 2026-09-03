@@ -52,7 +52,13 @@ export async function fetchFromVahan(rc, { timeoutMs = 12000 } = {}) {
   return fields;
 }
 
-/** Pending traffic fines, from vahanx's separate challan page. */
+/**
+ * Pending traffic fines from vahanx's challan page.
+ *
+ * That page returns "no challan records found" for every registration number
+ * tried, including ones that do not exist, so a clean result is treated as
+ * unverified rather than as proof that no fines exist.
+ */
 export async function fetchChallanSummary(rc, { timeoutMs = 10000 } = {}) {
   const res = await fetch(`${CHALLAN}${encodeURIComponent(rc)}`, {
     headers: { 'User-Agent': UA, Accept: 'text/html', 'Accept-Language': 'en-US,en;q=0.9' },
@@ -61,7 +67,7 @@ export async function fetchChallanSummary(rc, { timeoutMs = 10000 } = {}) {
   if (!res.ok) throw new Error(`Challan source responded ${res.status}`);
 
   const html = await res.text();
-  if (/no challan records found/i.test(html)) return { status: 'No pending challans' };
+  if (/no challan records found/i.test(html)) return { status: 'Not checked', verified: false };
 
   // Strip head/scripts/styles so marketing copy can't contribute stray amounts.
   const body = html
@@ -77,6 +83,7 @@ export async function fetchChallanSummary(rc, { timeoutMs = 10000 } = {}) {
   const decimals = Number.isInteger(total) ? 0 : 2;
 
   return {
+    verified: true,
     status: count ? `${count} pending challan${count > 1 ? 's' : ''}` : 'Challan records found',
     fines:
       total > 0

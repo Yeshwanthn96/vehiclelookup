@@ -102,7 +102,14 @@ const CHECKS = [
   function challans(data) {
     const status = get(data, 'Challan Status');
     const fines = get(data, 'Pending Fines');
-    if (!status) return null;
+    if (!status || /^not checked$/i.test(status)) {
+      return {
+        severity: 'unknown',
+        title: 'Pending challans not checked',
+        detail:
+          'No reliable free source for traffic fines. Check echallan.parivahan.gov.in or your state portal before buying.',
+      };
+    }
     if (/^no pending/i.test(status)) {
       return { severity: 'ok', title: 'No pending challans', detail: 'No unpaid traffic fines found.' };
     }
@@ -140,6 +147,7 @@ export function assessVehicle(data) {
 
   const critical = findings.filter((f) => f.severity === 'critical');
   const warnings = findings.filter((f) => f.severity === 'warn');
+  const unknowns = findings.filter((f) => f.severity === 'unknown');
 
   let verdict;
   if (critical.length) {
@@ -153,6 +161,12 @@ export function assessVehicle(data) {
       tone: 'warn',
       label: 'Check before buying',
       summary: `${warnings.length} item${warnings.length > 1 ? 's need' : ' needs'} attention, but nothing blocks a transfer.`,
+    };
+  } else if (unknowns.length) {
+    verdict = {
+      tone: 'warn',
+      label: 'Incomplete check',
+      summary: `Nothing wrong found, but ${unknowns.length} check${unknowns.length > 1 ? 's' : ''} could not be completed. Verify independently.`,
     };
   } else {
     verdict = { tone: 'good', label: 'Looks clean', summary: 'No expiry, loan or blacklist problems found in the RC record.' };
