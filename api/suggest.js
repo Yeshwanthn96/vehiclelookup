@@ -7,6 +7,18 @@ const API_KEY = process.env.AI_API_KEY;
 
 export const aiEnabled = Boolean(API_KEY);
 
+// Full state name reads better in a prompt than an RTO code the model may not recognize.
+const STATE_NAMES = {
+  AN: 'Andaman and Nicobar Islands', AP: 'Andhra Pradesh', AR: 'Arunachal Pradesh',
+  AS: 'Assam', BR: 'Bihar', CG: 'Chhattisgarh', CH: 'Chandigarh', DD: 'Daman and Diu',
+  DL: 'Delhi', DN: 'Dadra and Nagar Haveli', GA: 'Goa', GJ: 'Gujarat', HP: 'Himachal Pradesh',
+  HR: 'Haryana', JH: 'Jharkhand', JK: 'Jammu and Kashmir', KA: 'Karnataka', KL: 'Kerala',
+  LA: 'Ladakh', MH: 'Maharashtra', ML: 'Meghalaya', MN: 'Manipur', MP: 'Madhya Pradesh',
+  MZ: 'Mizoram', NL: 'Nagaland', OD: 'Odisha', OR: 'Odisha', PB: 'Punjab', PY: 'Puducherry',
+  RJ: 'Rajasthan', SK: 'Sikkim', TN: 'Tamil Nadu', TR: 'Tripura', TS: 'Telangana',
+  UK: 'Uttarakhand', UA: 'Uttarakhand', UP: 'Uttar Pradesh', WB: 'West Bengal',
+};
+
 const isMasked = (token) => [...token].some((c) => MASK_CHARS.includes(c));
 
 /** Same mask semantics as the client: one mask char is exactly one hidden letter. */
@@ -25,13 +37,17 @@ function buildPrompt(token, state) {
   const length = token.length;
   const first = token[0];
   const last = /[a-z]/i.test(token[length - 1]) ? token[length - 1] : null;
-  const region = state ? ` commonly used in the Indian state with RTO code ${state}` : ' used in India';
+  const stateName = STATE_NAMES[state];
+  const region = stateName
+    ? ` that are common among people from ${stateName}, India (the vehicle's RTO state)`
+    : ' that are common in India';
 
   return [
-    `List real Indian personal names${region} that are exactly ${length} letters long`,
-    `and start with the letter "${first}"`,
-    last ? ` and end with the letter "${last}"` : '',
-    '. Reply with a JSON array of up to 10 name strings and nothing else.',
+    `List real Indian personal first or last names${region}.`,
+    `Every name must be exactly ${length} letters long, start with the letter "${first}"`,
+    last ? `, and end with the letter "${last}"` : '',
+    `. Prioritize names actually used in that region over generic pan-Indian names.`,
+    ' Reply with a JSON array of up to 15 name strings and nothing else - no explanation, no markdown.',
   ].join('');
 }
 
@@ -71,7 +87,7 @@ async function askModel(token, state) {
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${API_KEY}` },
     body: JSON.stringify({
       model: MODEL,
-      temperature: 0.3,
+      temperature: 0.5,
       messages: [
         { role: 'system', content: 'You return only compact JSON arrays of names.' },
         { role: 'user', content: buildPrompt(token, state) },
@@ -97,5 +113,5 @@ async function askModel(token, state) {
   return (Array.isArray(parsed) ? parsed : [])
     .filter((name) => typeof name === 'string' && pattern.test(name.trim()))
     .map((name) => name.trim())
-    .slice(0, 10);
+    .slice(0, 15);
 }

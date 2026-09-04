@@ -74,14 +74,14 @@ export default function App() {
     [suggestions],
   );
 
-  // Dictionary hits are verified real names, so they lead; AI widens the net.
+  // The bundled dictionary is small, so AI results (regionally biased) lead;
+  // dictionary hits are appended as additional, verified-real options.
   const mergedParts = useMemo(
     () =>
       (suggestions?.parts || []).map((part) => {
-        const ai = (aiNames[part.token] || []).filter(
-          (name) => !part.candidates.includes(name),
-        );
-        return { ...part, ai, candidates: [...part.candidates, ...ai] };
+        const ai = aiNames[part.token] || [];
+        const dictOnly = part.candidates.filter((name) => !ai.includes(name));
+        return { ...part, ai, candidates: [...ai, ...dictOnly] };
       }),
     [suggestions, aiNames],
   );
@@ -383,8 +383,8 @@ export default function App() {
                     {part.masked && (
                       <span className="muted">
                         {" "}
-                        · {part.total} in dictionary
-                        {part.ai.length > 0 && `, ${part.ai.length} from AI`}
+                        · {part.ai.length > 0 && `${part.ai.length} from AI, `}
+                        {part.total} in dictionary
                       </span>
                     )}
                   </h3>
