@@ -88,12 +88,16 @@ async function askModel(token, state) {
     body: JSON.stringify({
       model: MODEL,
       temperature: 0.5,
+      max_tokens: 700,
+      // Reasoning models (e.g. Groq's gpt-oss) otherwise spend the whole
+      // token budget on hidden chain-of-thought and return empty content.
+      reasoning_effort: 'low',
       messages: [
         { role: 'system', content: 'You return only compact JSON arrays of names.' },
         { role: 'user', content: buildPrompt(token, state) },
       ],
     }),
-    signal: AbortSignal.timeout(15000),
+    signal: AbortSignal.timeout(20000),
   });
 
   if (!response.ok) throw new Error(`AI provider responded ${response.status}`);
@@ -110,8 +114,9 @@ async function askModel(token, state) {
   const pattern = tokenToRegex(token);
   // The model is unreliable about length, so every suggestion is re-checked
   // against the mask before it reaches the user.
+  const seen = new Set();
   return (Array.isArray(parsed) ? parsed : [])
-    .filter((name) => typeof name === 'string' && pattern.test(name.trim()))
-    .map((name) => name.trim())
+    .map((name) => (typeof name === 'string' ? name.trim() : ''))
+    .filter((name) => name && pattern.test(name) && !seen.has(name.toLowerCase()) && seen.add(name.toLowerCase()))
     .slice(0, 15);
 }
