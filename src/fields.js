@@ -44,7 +44,18 @@ const GROUPS = [
 
 /** Dates come back as "20-Oct-2040"; anything else (e.g. "LTT") is not a date. */
 export function parseApiDate(value) {
-  const match = /^(\d{1,2})-([A-Za-z]{3})-(\d{4})$/.exec(String(value ?? '').trim());
+  const text = String(value ?? '').trim();
+  if (!text) return null;
+
+  const explicit = /^(\d{1,2})[-\s]+([A-Za-z]{3,9})[-\s]+(\d{4})$/i.exec(text);
+  if (explicit) {
+    const [, day, monthName, year] = explicit;
+    const month = MONTHS[monthName.toLowerCase().slice(0, 3)];
+    if (month === undefined) return null;
+    return new Date(Number(year), month, Number(day));
+  }
+
+  const match = /^(\d{1,2})-([A-Za-z]{3})-(\d{4})$/.exec(text);
   if (!match) return null;
   const month = MONTHS[match[2].toLowerCase()];
   if (month === undefined) return null;
